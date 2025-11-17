@@ -292,13 +292,13 @@ checkEnv() {
   # TODO prevent multiple calls to apt-get update
   (which dnf && dnf install -y perl-Digest-SHA) || true # Fedora 24
   which bzcat || (which yum && yum install -y bzip2) \
-              || (which apt-get && apt-get update && apt-get install -y bzip2) \
+              || (which apt && apt update && apt install -y bzip2) \
               || true
   which xzcat || (which yum && yum install -y xz-utils) \
-              || (which apt-get && apt-get update && apt-get install -y xz-utils) \
+              || (which apt && apt update && apt install -y xz-utils) \
               || true
   which curl  || fakeCurlUsingWget \
-              || (which apt-get && apt-get update && apt-get install -y curl) \
+              || (which apt && apt update && apt install -y curl) \
               || true
 
   req curl || req wget || { echo "ERROR: Missing both curl and wget";  return 1; }
