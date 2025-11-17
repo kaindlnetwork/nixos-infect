@@ -345,17 +345,36 @@ req() {
 checkEnv() {
   [[ "$(whoami)" == "root" ]] || { echo "ERROR: Must run as root"; return 1; }
 
-  # Perform some easy fixups before checking
-  # TODO prevent multiple calls to apt-get update
   (which dnf && dnf install -y perl-Digest-SHA) || true # Fedora 24
-  which bzcat || (which yum && yum install -y bzip2) \
-              || (which apt && apt update && apt install -y bzip2) \
-              || true
-  which xzcat || (which yum && yum install -y xz-utils) \
-              || (which apt && apt update && apt install -y xz-utils) \
-              || true
+
+  # --- bzip2 / bzcat sicherstellen ---
+  which bzcat || \
+    (which dnf    >/dev/null 2>&1 && dnf install -y bzip2)              || \
+    (which yum    >/dev/null 2>&1 && yum install -y bzip2)              || \
+    (which apt-get>/dev/null 2>&1 && apt-get update && apt-get install -y bzip2) || \
+    (which apt    >/dev/null 2>&1 && apt update && apt install -y bzip2)        || \
+    (which zypper >/dev/null 2>&1 && zypper --non-interactive install bzip2)    || \
+    (which apk    >/dev/null 2>&1 && apk add --no-cache bzip2)          || \
+    true
+
+  # --- xz / xzcat sicherstellen (gleiches Muster) ---
+  which xzcat || \
+    (which dnf    >/dev/null 2>&1 && dnf install -y xz xz-libs || dnf install -y xz-utils) || \
+    (which yum    >/dev/null 2>&1 && yum install -y xz xz-utils)       || \
+    (which apt-get>/dev/null 2>&1 && apt-get update && apt-get install -y xz-utils) || \
+    (which apt    >/dev/null 2>&1 && apt update && apt install -y xz-utils)        || \
+    (which zypper >/dev/null 2>&1 && zypper --non-interactive install xz)          || \
+    (which apk    >/dev/null 2>&1 && apk add --no-cache xz)            || \
+    true
+
+  # --- curl sicherstellen (falls nicht da) ---
   which curl  || fakeCurlUsingWget \
-              || (which apt && apt update && apt install -y curl) \
+              || (which dnf    >/dev/null 2>&1 && dnf install -y curl) \
+              || (which yum    >/dev/null 2>&1 && yum install -y curl) \
+              || (which apt-get>/dev/null 2>&1 && apt-get update && apt-get install -y curl) \
+              || (which apt    >/dev/null 2>&1 && apt update && apt install -y curl) \
+              || (which zypper >/dev/null 2>&1 && zypper --non-interactive install curl) \
+              || (which apk    >/dev/null 2>&1 && apk add --no-cache curl) \
               || true
 
   req curl || req wget || { echo "ERROR: Missing both curl and wget";  return 1; }
