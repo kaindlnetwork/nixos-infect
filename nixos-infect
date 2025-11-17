@@ -5,10 +5,24 @@
 set -e -o pipefail
 
 autodetectProvider() {
+  # Hetzner bleibt wie gehabt
   if [ -e /etc/hetzner-build ]; then
     PROVIDER="hetznercloud"
+    return
+  fi
+
+  # Hostname holen (FQDN, falls verfügbar)
+  local hn
+  hn=$(hostname -f 2>/dev/null || hostname)
+
+  # Wenn "vmd" Teil des Hostnamens ist -> Contabo
+  # Beispiele: vmd12345.contaboserver.net, vmd12345, irgendwas-mit-vmd-xyz
+  if echo "$hn" | grep -qi 'vmd'; then
+    PROVIDER="contabo"
+    return
   fi
 }
+
 
 # Prüft, ob ein einzelnes Hostlabel RFC-1123-konform ist
 is_rfc_hostname() {
