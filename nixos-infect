@@ -236,6 +236,20 @@ checkExistingSwap() {
   fi
 }
 
+get_swapdir() {
+  # Versuche, den Dateisystemtyp von /tmp aus /proc/mounts zu lesen
+  # Format der Zeilen: <device> <mountpoint> <fstype> ...
+  local fstype
+  fstype=$(awk '$2 == "/tmp" {print $3; exit}' /proc/mounts 2>/dev/null || true)
+
+  # Wenn /tmp tmpfs ist ODER wir nichts gefunden haben, auf /root ausweichen
+  if [ "$fstype" = "tmpfs" ] || [ -z "$fstype" ]; then
+    echo "/root"
+  else
+    echo "/tmp"
+  fi
+}
+
 makeSwap() {
   local swapdir
   swapdir=$(get_swapdir)
