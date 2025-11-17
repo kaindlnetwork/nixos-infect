@@ -10,6 +10,35 @@ autodetectProvider() {
   fi
 }
 
+# Prüft, ob ein einzelnes Hostlabel RFC-1123-konform ist
+is_rfc_hostname() {
+  local h="$1"
+  [[ "$h" =~ ^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$ ]]
+}
+
+# Nimmt einen "schmutzigen" Hostnamen und macht etwas RFC-Verträgliches draus
+make_valid_hostname() {
+  local h="$1"
+
+  # alles klein schreiben
+  h=$(echo "$h" | tr '[:upper:]' '[:lower:]')
+
+  # alle Zeichen außer a-z, 0-9 und - durch - ersetzen
+  h=$(echo "$h" | sed 's/[^a-z0-9-]/-/g')
+
+  # führende und abschließende - entfernen
+  h=$(echo "$h" | sed 's/^-*//; s/-*$//')
+
+  # auf 63 Zeichen kürzen (maximale Länge eines Labels)
+  h=${h:0:63}
+
+  # falls danach nichts übrig bleibt, auf sicheren Default gehen
+  [ -z "$h" ] && h="nixos"
+
+  echo "$h"
+}
+
+
 makeConf() {
   # Skip everything if main config already present
   [[ -e /etc/nixos/configuration.nix ]] && return 0
@@ -33,6 +62,18 @@ makeConf() {
   local network_import=""
 
   [[ -n "$doNetConf" ]] && network_import="./networking.nix # generated at runtime by nixos-infect"
+
+  # Hostname ermitteln und RFC-konform machen
+  local raw_hostname hostname_safe
+  raw_hostname=$(hostname -s 2>/dev/null || echo "")
+
+  if is_rfc_hostname "$raw_hostname"; then
+    hostname_safe="$raw_hostname"
+  else
+    hostname_safe=$(make_valid_hostname "$raw_hostname")
+    echo "WARNING: Non-RFC-compliant hostname '$raw_hostname' normalized to '$hostname_safe'" >&2
+  fi
+
   cat > /etc/nixos/configuration.nix << EOF
 { ... }: {
   imports = [
