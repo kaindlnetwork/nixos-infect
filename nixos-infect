@@ -486,8 +486,16 @@ infect() {
   /nix/var/nix/profiles/system/bin/switch-to-configuration boot
 }
 
-if [ ! -v PROVIDER ]; then
+# Provider ermitteln (manuell vs. autodetect)
+if [ -v PROVIDER ]; then
+  echo "INFO: Using provider from environment: '$PROVIDER'" >&2
+else
   autodetectProvider
+  if [ -n "$PROVIDER" ]; then
+    echo "INFO: Autodetected provider: '$PROVIDER'" >&2
+  else
+    echo "INFO: No specific provider detected, using generic mode" >&2
+  fi
 fi
 
 [ "$PROVIDER" = "digitalocean" ] && doNetConf=y # digitalocean requires detailed network config to be generated
@@ -497,8 +505,9 @@ if [[ "$PROVIDER" = "digitalocean" ]] \
    || [[ "$PROVIDER" = "servarica" ]] \
    || [[ "$PROVIDER" = "hetznercloud" ]] \
    || [[ "$PROVIDER" = "contabo" ]]; then
-    doNetConf=y # some providers require detailed network config to be generated
+	doNetConf=y # some providers require detailed network config to be generated
 fi
+
 
 checkEnv
 prepareEnv
