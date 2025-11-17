@@ -65,16 +65,31 @@ makeConf() {
 
   # NB <<"EOF" quotes / $ ` in heredocs, <<EOF does not
   mkdir -p /etc/nixos
-  # Prevent grep for sending error code 1 (and halting execution) when no lines are selected : https://www.unix.com/man-page/posix/1P/grep
+
+  # SSH-Keys für root sammeln
+  # Prevent grep for sending error code 1 (and halting execution) when no lines are selected
+  # https://www.unix.com/man-page/posix/1P/grep
   local IFS=$'\n'
-  for trypath in /root/.ssh/authorized_keys /home/$SUDO_USER/.ssh/authorized_keys $HOME/.ssh/authorized_keys; do
+  local keys=""
+  for trypath in /root/.ssh/authorized_keys /home/$SUDO_USER/.ssh/authorized_keys "$HOME"/.ssh/authorized_keys; do
       [[ -r "$trypath" ]] \
       && keys=$(sed -E 's/^[^#].*[[:space:]]((sk-ssh|sk-ecdsa|ssh|ecdsa)-[^[:space:]]+)[[:space:]]+([^[:space:]]+)([[:space:]]*.*)$/\1 \3\4/' "$trypath") \
-      && [[ ! -z "$keys" ]] \
+      && [[ -n "$keys" ]] \
       && break
   done
-  local network_import=""
 
+  # Sicherstellen, dass mindestens ein SSH-Key gefunden wurde
+  if [[ -z "${keys//[[:space:]]/}" ]]; then
+    echo "ERROR: No SSH public keys found to import for NixOS." >&2
+    echo "Searched in:" >&2
+    echo "  - /root/.ssh/authorized_keys" >&2
+    echo "  - /home/$SUDO_USER/.ssh/authorized_keys" >&2
+    echo "  - $HOME/.ssh/authorized_keys" >&2
+    echo "Aborting to avoid locking yourself out of SSH on the new NixOS system." >&2
+    exit 1
+  fi
+
+  local network_import=""
   [[ -n "$doNetConf" ]] && network_import="./networking.nix # generated at runtime by nixos-infect"
 
   # Hostname ermitteln und RFC-konform machen
@@ -88,6 +103,7 @@ makeConf() {
     echo "WARNING: Non-RFC-compliant hostname '$raw_hostname' normalized to '$hostname_safe'" >&2
   fi
 
+  # Hauptkonfiguration schreiben
   cat > /etc/nixos/configuration.nix << EOF
 { ... }: {
   imports = [
@@ -98,18 +114,20 @@ makeConf() {
 
   boot.tmp.cleanOnBoot = true;
   zramSwap.enable = ${zramswap};
-  networking.hostName = "$(hostname -s)";
-  networking.domain = "$(hostname -d)";
+  networking.hostName = "$hostname_safe";
+  networking.domain = "$(hostname -d 2>/dev/null || echo "")";
   services.openssh.enable = true;
   users.users.root.openssh.authorizedKeys.keys = [$(while read -r line; do
-    line=$(echo -n "$line" | sed 's/\r//g')
-    trimmed_line=$(echo -n "$line" | xargs)
-    echo -n "''$trimmed_line'' "
+    line=\$(echo -n "\$line" | sed 's/\r//g')
+    trimmed_line=\$(echo -n "\$line" | xargs)
+    echo -n "''\$trimmed_line'' "
   done <<< "$keys")];
   system.stateVersion = "23.11";
 }
 EOF
 
+  # Bootloader-/FS-Konfiguration vorbereiten
+  local bootcfg
   if isEFI; then
     bootcfg=$(cat << EOF
   boot.loader.grub = {
@@ -127,12 +145,14 @@ EOF
 )
   fi
 
-  availableKernelModules=('"ata_piix"' '"uhci_hcd"' '"xen_blkfront"')
+  # Kernel-Module
+  local availableKernelModules=('"ata_piix"' '"uhci_hcd"' '"xen_blkfront"')
   if isX86_64; then
     availableKernelModules+=('"vmw_pvscsi"')
   fi
 
-  # If you rerun this later, be sure to prune the filesSystems attr
+  # hardware-configuration.nix schreiben
+  # Wenn du das Skript später erneut laufen lässt, solltest du fileSystems ggf. manuell prüfen
   cat > /etc/nixos/hardware-configuration.nix << EOF
 { modulesPath, ... }:
 {
@@ -145,18 +165,8 @@ $bootcfg
 }
 EOF
 
+  # Optionale Netzwerkkonfiguration generieren
   [[ -n "$doNetConf" ]] && makeNetworkingConf || true
-}
-
-makeLightsailConf() {
-  mkdir -p /etc/nixos
-  cat > /etc/nixos/configuration.nix << EOF
-{ config, pkgs, modulesPath, lib, ... }:
-{
-  imports = [ "\${modulesPath}/virtualisation/amazon-image.nix" ];
-  boot.loader.grub.device = lib.mkForce "/dev/nvme0n1";
-}
-EOF
 }
 
 makeNetworkingConf() {
