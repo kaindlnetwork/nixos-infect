@@ -4,6 +4,23 @@
 
 set -e -o pipefail
 
+cleanupTmpSwap() {
+  # Wenn wir ein eigenes temporäres Swapfile angelegt haben, gezielt aufräumen
+  if [ -n "$swapFile" ]; then
+    echo "INFO: Cleaning up temporary swap file $swapFile" >&2
+    # Versuch, nur dieses Swapfile zu deaktivieren – Fehler ignorieren
+    swapoff "$swapFile" 2>/dev/null || true
+    rm -f "$swapFile" 2>/dev/null || true
+  fi
+
+  # Fallback: eventuelle Reste mit dem bekannten Pattern wegputzen
+  rm -f /tmp/nixos-infect.*.swp /root/nixos-infect.*.swp 2>/dev/null || true
+}
+
+# Cleanup bei normalem Ende, Fehlern und Ctrl+C (SIGINT)
+trap cleanupTmpSwap EXIT INT TERM
+
+
 autodetectProvider() {
   # Hetzner bleibt wie gehabt
   if [ -e /etc/hetzner-build ]; then
