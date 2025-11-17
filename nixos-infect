@@ -196,7 +196,14 @@ checkExistingSwap() {
 }
 
 makeSwap() {
-  swapFile=$(mktemp /tmp/nixos-infect.XXXXX.swp)
+  local swapdir
+  swapdir=$(get_swapdir)
+
+  mkdir -p "$swapdir"
+
+  # swapFile absichtlich NICHT local, damit removeSwap() es sehen kann
+  swapFile=$(mktemp "$swapdir/nixos-infect.XXXXXX.swp")
+
   dd if=/dev/zero "of=$swapFile" bs=1M count=$((1*1024))
   chmod 0600 "$swapFile"
   mkswap "$swapFile"
@@ -204,8 +211,17 @@ makeSwap() {
 }
 
 removeSwap() {
+  # Erst alles Swapping deaktivieren – entspricht originalem Verhalten
   swapoff -a
-  rm -vf /tmp/nixos-infect.*.swp
+
+  # Falls wir ein temporäres Swapfile angelegt haben, löschen wir GENAU dieses
+  if [ -n "$swapFile" ]; then
+    rm -vf "$swapFile" 2>/dev/null || true
+  else
+    # Fallback: falls aus irgendeinem Grund swapFile nicht gesetzt ist,
+    # versuche, bekannte Pfade aufzuräumen (alte Logik).
+    rm -vf /tmp/nixos-infect.*.swp /root/nixos-infect.*.swp 2>/dev/null || true
+  fi
 }
 
 isX86_64() {
